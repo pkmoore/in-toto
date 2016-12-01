@@ -17,5 +17,7 @@ setup(
                     'python-dateutil', 'iso8601'],
   test_suite="test.runtests",
   scripts=['toto/toto-run.py',
-           'toto/toto-verify.py']
+           'toto/toto-verify.py',
+           'toto/parsebsl.py',
+           'toto/verifybsl.py']
 )
