@@ -8,12 +8,14 @@ def main():
   # to specify that they are athorized to perform certain step in the layout
   key_bob = import_rsa_key_from_file("../functionary_bob/bob.pub")
   key_carl = import_rsa_key_from_file("../functionary_carl/carl.pub")
+  key_steve = import_rsa_key_from_file("../functionary_steve/steve.pub")
 
   layout = Layout.read({
     "_type": "layout",
     "keys": {
         key_bob["keyid"]: key_bob,
         key_carl["keyid"]: key_carl,
+	key_steve["keyid"]: key_steve,
     },
     "steps": [{
         "name": "write-code",
@@ -21,6 +23,13 @@ def main():
         "product_matchrules": [["CREATE", "foo.py"]],
         "pubkeys": [key_bob["keyid"]],
         "expected_command": "vi",
+      },
+      {
+        "name": "after-vcs",
+        "material_matchrules": [],
+        "product_matchrules": [["CREATE", "bsl.json"]],
+        "pubkeys": [key_steve["keyid"]],
+        "expected_command": "parsebsl.py",
       },
       {
         "name": "package",
@@ -54,7 +63,18 @@ def main():
 
         ],
         "run": "tar xfz foo.tar.gz",
-      }],
+      },
+      {"name": "verify_bsl",
+      "material_matchrules": [
+            ["CREATE", "*"],
+      ],
+      "product_matchrules": [
+            ["MATCH", "PRODUCT", "bsl.json", "AS", "bsl.json", "FROM", "after-vcs"],
+            ["CREATE", "*"],
+      ],
+      "run": "verifybsl.py",
+      }, 
+      ],
     "signatures": []
   })
 

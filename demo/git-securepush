@@ -1,0 +1,207 @@
+#!/bin/bash
+#************** Functions ***********************************
+
+#This function creates the bsl entries related to the push operation
+function update_bsl_push {
+
+	commits=`git log @{u}.. --pretty=format:"%H" 2>/dev/null || git rev-list $CURRENT_BRANCH` 
+	git checkout -q bsl
+	
+	#Computing Hash for previous entries
+	csplit bsl '/^-----BEGIN PGP SIGNED MESSAGE-----$/' '{*}'
+	LAST_ENTRY=`ls -r x*|head -1`
+	HASH=`cat $LAST_ENTRY|shasum | cut -d' ' -f1`
+
+
+	#Updte bsl
+	echo "Related Commits" >bsl.tmp
+	echo $commits >>bsl.tmp
+	echo "Branch:"$CURRENT_BRANCH >>bsl.tmp
+	HEAD_HASH=`git rev-parse $CURRENT_BRANCH`
+	echo "HEAD":$HEAD_HASH >>bsl.tmp
+	echo "PREV_HASH:"$HASH >>bsl.tmp
+}
+
+#This function creates the bsl entries related to the fetch operation
+function update_bsl_fetch {
+		git checkout -q bsl
+		#split -p "-----BEGIN PGP SIGNED MESSAGE-----" bsl
+		csplit bsl '/^-----BEGIN PGP SIGNED MESSAGE-----$/' '{*}'
+        LAST_ENTRY=`ls -r x*|head -1`
+        HASH=`cat $LAST_ENTRY|shasum | cut -d' ' -f1`
+        echo "Branch:"$CURRENT_BRANCH >bsl.tmp
+        FETCH_HEAD=`cat .git/FETCH_HEAD |grep $CURRENT_BRANCH |cut -f1`
+        echo "FETCH_HEAD:"$FETCH_HEAD >>bsl.tmp
+        echo "PREV_HASH:"$HASH >>bsl.tmp
+        rm x*
+}
+
+#This function intializes the bsl branch and creates bsl file intial entries
+function bsl_init {
+
+		#Set init variabe
+		init=1
+		commits=`git rev-list $CURRENT_BRANCH` 
+		git checkout -q --orphan bsl
+        git rm -qrf .
+        echo "Related Commits" >bsl.tmp
+		echo $commits >>bsl.tmp
+        echo "Branch:"$CURRENT_BRANCH >>bsl.tmp
+        HEAD_HASH=`git rev-parse $CURRENT_BRANCH`
+		echo "HEAD":$HEAD_HASH >>bsl.tmp
+		echo "PREV_HASH:"$HASH >>bsl.tmp
+}
+
+
+#This function fetches the newer version of bsl
+function bsl_fetch {
+
+	git fetch -q origin bsl
+    git checkout -q bsl
+
+    #Capturing the state of BSL before the merge
+    BSL_PREV_HEAD=`git rev-parse HEAD` 
+    git merge -q
+}
+
+# This function will sign the bsl entries and commits the changes 
+function sign_bsl {
+
+		#Signthe bsl
+		cat bsl.tmp |gpg --clearsign >>bsl
+
+		#Remove temp file
+		rm bsl.tmp
+
+		# Commit the new BSL
+		git add bsl
+		git commit -S -qm "Commiting the changes at BSL"
+}
+
+#This function pushes the bsl branch to server
+function push_bsl {
+
+		git push -q --set-upstream origin bsl 2>/dev/null
+
+		#Checking the status of BSL Push
+		status=$?
+		
+}
+
+#This funtion pushes the branch to server
+
+function push_branch {
+
+	git checkout -q $CURRENT_BRANCH
+	git push -q --set-upstream origin $CURRENT_BRANCH
+
+}
+
+#This function verifies the bsl file
+function bsl_verify {
+
+		git checkout -q bsl
+		if git diff $BSL_PREV_HEAD HEAD --stat|grep -q 'deletion'
+		then
+		    echo "BSL file corrupted"
+		fi
+
+		#verify the signature on last enry
+		LAST_ENTRY=`ls -r x*|head -1` 
+		echo "******* Verifying the sign on last bsl entry *******"
+		gpg --verify $LAST_ENTRY &> /dev/null 
+		local status=$?
+		if [ $status -ne 0 ]
+		then
+			echo "Signature verification on last entry is failed"
+		else
+			echo "Signature verification on last entry is successful"
+		fi
+		echo "****************************************************"
+
+		#verifying the signature
+		echo "******* Verifying the Hash on all bsl entries *********"
+		for i in `ls -r x*`
+		do
+		    HASH_2=`cat $i|shasum|cut -d' ' -f1`
+		    if [[ "$HASH_2" != "$HASH_1" && ! -z "$HASH_1" ]]
+		    then
+		        echo "Hash verfication on the following entry failed"
+		        echo `cat $i`
+		        rm x*
+		        return 1
+		    else
+			    HASH_1=`cat $i|grep 'HASH:'|cut -d':' -f2`
+			    rm $i
+			fi
+
+		done
+		echo "Hash verification successful on all entries"
+		echo "****************************************************"
+		
+}
+
+#************************************************************************************
+
+
+
+#Get Current Brach
+CURRENT_BRANCH=$(git symbolic-ref HEAD | sed -e 's,.*/\(.*\),\1,')
+
+#check if we are pushing bsl branch
+if [ "$CURRENT_BRANCH" == "bsl" ]
+then
+    exit 0
+fi
+
+#Update BSL
+if  [[ $(git branch -a |grep 'remotes/origin/bsl') ]]
+then
+	echo "Updating the bsl ..."
+	update_bsl_push
+else
+	# BSL branch Intialization
+	echo "Intializing the bsl ..."
+	bsl_init
+fi
+#Signing the bsl
+echo "Signing and Commiting the bsl ..."
+sign_bsl
+
+#Push BSL
+echo "Pushing the bsl ... "
+push_bsl
+while [ $status -ne 0 ]
+do
+	echo "bsl push failed !!"
+	echo "Fetching the bsl from server ..."
+	#reset the bsl branch
+	git reset --hard origin/bsl
+	bsl_fetch
+	bsl_verify
+
+	BSL_BRANCH_HEAD=`cat bsl |grep HEAD |tail -1|cut -d':' -f2`
+	#Verify the branch can be pushed to remote
+	if [[ $(git rev-list $CURRENT_BRANCH|grep $BSL_BRANCH_HEAD) ]]
+	then
+		echo "Updating the bsl with push entry"
+		update_bsl_push
+		echo "Signing the bsl"
+		sign_bsl
+		echo "Pushing the bsl"
+		push_bsl
+	else
+		echo $CURRENT_BRANCH "Cann't be pushed to remote. Please fetch an merge the changes then retry the fetch"
+		git checkout -q $CURRENT_BRANCH
+		exit 1
+	fi
+done
+#Removing the split files
+rm x* 2>/dev/null
+
+#Push current branch
+echo "Pushing the" $CURRENT_BRANCH "... "
+push_branch
+
+
+
