@@ -2,7 +2,7 @@ from git import Repo
 import collections
 import json
 
-repo = Repo('../')
+repo = Repo('.')
 commits = list(repo.iter_commits('bsl'))
 content1=""
 jsonArr=[]
