@@ -11,6 +11,9 @@ software supply chain.
 This is, you will perform the commands on behalf of Alice, Bob, Steve and Carl as well
 as the client who verifies the final product.
 
+### Before you start
+Create your own demo repository in github and copy the contents of the `demo/` folder to your repo and commit to remote. This is because you mostly wouldn't have permission to push/fetch from this repo.
+Make sure you have a gpg key in our system's gpg keyring. Your key's id/mail/password must be same as your github's id/email/password.
 
 ### Download and setup in-toto on *NIX (Linux, OS X, ..)
 ```shell
@@ -33,8 +36,8 @@ export SIMPLE_SETTINGS=toto.settings
 # requirements file
 sudo pip install pycrypto cryptography
 
-# Change into the demo directoy and you are ready to start
-cd demo
+# Change into your own demo directoy and you are ready to start
+cd <relative path to to your demo directory>
 ```
 Inside the demo directory you will find four directories: `owner_alice`,
 `functionary_bob`,`functionary_steve`, `functionary_carl` and `final_product`. Alice, Bob, Steve and Carl
